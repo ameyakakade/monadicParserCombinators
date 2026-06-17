@@ -1,0 +1,3 @@
+** Monadic Parser combinators in haskell.
+Implementing monadic parser combinators from this whitepaper:
+https://www.mathematik.uni-marburg.de/~loogen/Lehre/ws05/Compilerbau/monparsing.pdf 
