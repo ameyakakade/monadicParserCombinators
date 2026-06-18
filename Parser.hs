@@ -42,6 +42,7 @@ item = Parser $ \inp -> case inp of
 -- lists, which we flatten with concat.
 
 instance Monad Parser where
+    return = result
     p >>= f = Parser $ \input -> let resultList = runParser p input
                                  in concat $ map (\(v, restIn) -> runParser (f v) restIn) resultList
 
@@ -98,6 +99,59 @@ word = neWord <|> result ""
            xs <- word
            result (x:xs)
 
+string :: String -> Parser String
+string "" = return ""
+string (x:xs) = do
+  char x
+  string xs
+  return (x:xs)
+
+many' :: Parser a -> Parser [a]
+many' p = (do
+  x <- p
+  xs <- many' p
+  return (x:xs)) <|> return []
+
+many1 :: Parser a -> Parser [a]
+many1 p = do
+  x <- p
+  xs <- many' p
+  return (x:xs)
+
+nat :: Parser Int
+nat = fmap read (many1 digit)
+
+int :: Parser Int
+int = do
+  f <- (fmap (const negate) (char '-')) <|> return id
+  n <- nat
+  return (f n)
+
+ints' :: Parser [Int]
+ints' = do
+  char '['
+  n <- int
+  ns <- many' (do char ','
+                  int)
+  char ']'
+  return (n:ns)
+
+sepby1 :: Parser a -> Parser b -> Parser [a]
+sepby1 p sep = do
+  n <- p
+  ns <- many' (do sep
+                  p)
+  return (n:ns)
+
+ints :: Parser [Int]
+ints = do
+  char '['
+  ns <- sepby1 int (char ',')
+  char ']'
+  return ns
+
+nints = (char '[') *> (sepby1 int (char ',')) <* (char ']')
+
 instance Alternative Parser where
     empty = zero
     p <|> q = plus p q
@@ -108,6 +162,6 @@ instance Functor Parser where
     (a, restIn) <- p input
     return (f a, restIn)
 
--- We used the 'result' we defined above as it means the same thing as pure
 instance Applicative Parser where
     pure = result
+    a <*> b = undefined
