@@ -42,7 +42,6 @@ item = Parser $ \inp -> case inp of
 -- lists, which we flatten with concat.
 
 instance Monad Parser where
-    return = result
     p >>= f = Parser $ \input -> let resultList = runParser p input
                                  in concat $ map (\(v, restIn) -> runParser (f v) restIn) resultList
 
@@ -152,6 +151,108 @@ ints = do
 
 nints = (char '[') *> (sepby1 int (char ',')) <* (char ']')
 
+-- We will be making a simple calculator using our parser
+
+-- expr ::= term addop term | term
+-- term ::= factor exop factor | factor
+-- exop ::= ^
+-- addop ::= + | -
+-- factor ::= nat | (expr)
+
+-- expr always evaluates to a number
+expr :: Parser Int
+expr = term `chainl1` addop
+
+term :: Parser Int
+term = factor `chainr1` expop
+
+-- addop will be a binary function
+addop :: Parser (Int -> Int -> Int)
+addop = fmap (const (+)) (char '+')
+        <|> fmap (const (-)) (char '-')
+
+expop :: Parser (Int -> Int -> Int)
+expop = fmap (const (^)) (char '^')
+
+-- factor also evaluates to a number
+factor :: Parser Int
+factor = nat
+         <|> ( do
+               char '('
+               exp <- expr
+               char ')'
+               return exp
+             )
+
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 factor addop = (do
+  p <- factor
+  rest p) <|> factor
+    where rest x = (do
+            op <- addop
+            y <- factor
+            rest (op x y)) <|> return x
+
+chainr1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainr1 factor addop = do
+  p <- factor
+  return p <|> (do
+                 f <- addop
+                 y <- chainr1 factor addop
+                 return $ f p y)
+
+first :: Parser a -> Parser a
+first p = Parser $ \inp -> case runParser p inp of
+                             [] -> []
+                             (x:xs) -> [x]
+
+(+++) :: Parser a -> Parser a -> Parser a
+p +++ q = first (p <|> q)
+
+spaces :: Parser ()
+spaces = do
+  many1 (sat isSpace)
+  return ()
+
+comment :: Parser ()
+comment = do
+  string "--"
+  many (sat (/= '\n'))
+  return ()
+
+junk :: Parser ()
+junk = do
+  many (spaces +++ comment)
+  return ()
+
+parse :: Parser a -> Parser a
+parse p = do
+  junk
+  p
+
+token :: Parser a -> Parser a
+token p = do
+  t <- p
+  junk
+  return t
+
+natural = token nat
+
+integer = token int
+
+symbol xs = token (string xs)
+
+identifier ks = token (do
+                        x <- ident
+                        if elem ks x
+                        then zero
+                        else return x)
+
+ident = do
+  x <- alpha
+  xs <- many alphaNum
+  return (x:xs)
+        
 instance Alternative Parser where
     empty = zero
     p <|> q = plus p q
